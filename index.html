@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>ЭПШТЕЙН v5.6 · BOSS & BUFFS</title>
+    <style>
+        :root { --gold: #f1c40f; --red: #e74c3c; --bg: #0a0e14; --green: #2ecc71; }
+        * { user-select: none; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { background: var(--bg); color: white; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; justify-content: center; }
+        .app { width: 100%; max-width: 450px; min-height: 100vh; padding: 15px; display: flex; flex-direction: column; }
+        
+        .header { background: #161b22; padding: 15px; border-radius: 20px; border: 1px solid #30363d; margin-bottom: 10px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+        .stat-item { text-align: center; font-size: 0.8rem; }
+        .stat-val { display: block; font-weight: bold; color: var(--gold); font-size: 1rem; }
+
+        .log-box { flex-grow: 1; background: #0d1117; border-radius: 20px; border: 1px solid #30363d; padding: 20px; margin-bottom: 10px; display: flex; flex-direction: column; justify-content: center; text-align: center; position: relative; min-height: 150px; }
+        .log-text { font-size: 1.1rem; font-weight: 500; transition: 0.2s; }
+        .passive-info { font-size: 0.7rem; color: var(--green); margin-top: 5px; }
+
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .btn { border: none; padding: 14px; border-radius: 12px; color: white; font-weight: bold; cursor: pointer; transition: 0.2s; text-transform: uppercase; font-size: 0.8rem; }
+        .btn:active { transform: scale(0.98); }
+        .btn-main { background: linear-gradient(135deg, #238636, #2ea043); grid-column: span 2; }
+        .btn-alt { background: #21262d; border: 1px solid #30363d; }
+        .btn-shop { background: #30363d; color: var(--gold); border: 1px solid var(--gold); }
+        .btn-ult { background: linear-gradient(135deg, #8957e5, #6e40c9); grid-column: span 2; }
+
+        .shop-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 100; display: flex; align-items: center; justify-content: center; }
+        .shop-menu { background: #161b22; width: 85%; padding: 20px; border-radius: 25px; border: 2px solid var(--gold); }
+
+        .char-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; max-height: 55vh; }
+        .card { background: #161b22; border: 1px solid #30363d; padding: 12px; border-radius: 15px; display: flex; justify-content: space-between; align-items: center; }
+        
+        .progress-cont { width: 100%; height: 6px; background: #333; border-radius: 3px; margin-top: 10px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--gold); width: 0%; transition: 0.3s; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <div id="screen-menu">
+        <div class="header">
+            <div class="stat-item">💎 Гемы<span class="stat-val" id="m-gems">0</span></div>
+            <div class="stat-item">🏦 Банк<span class="stat-val" id="m-bank">0</span></div>
+            <div class="stat-item">🏆 LVL<span class="stat-val" id="m-lvl">1</span></div>
+        </div>
+        <div class="char-list" id="char-list"></div>
+        <div class="controls" style="margin-top:15px;">
+            <button class="btn btn-main" onclick="Game.spin()">🎲 ГАТЧА (250 🪙)</button>
+            <button class="btn btn-alt" onclick="UI.toggleDebug()">⚙️ КОДЫ</button>
+        </div>
+    </div>
+
+    <div id="screen-game" class="hidden">
+        <div class="header">
+            <div style="font-size:0.7rem;">ГЕРОЙ<br><b id="g-name">?</b></div>
+            <div class="stat-item">❤️ HP<span class="stat-val" id="g-hp">0</span></div>
+            <div class="stat-item">🪙 МОНЕТЫ<span class="stat-val" id="g-coins">0</span></div>
+        </div>
+        <div class="log-box">
+            <div id="boss-ui" class="hidden">
+                <div style="color:var(--red); font-weight:bold;">👹 БОСС: ЭМИТЕНТ</div>
+                <div class="progress-cont"><div id="boss-hp-bar" class="progress-fill" style="background:var(--red)"></div></div>
+            </div>
+            <div class="log-text" id="g-log">Путь начинается...</div>
+            <div class="passive-info" id="g-passive"></div>
+            <div class="progress-cont" id="trip-cont"><div class="progress-fill" id="g-progress"></div></div>
+        </div>
+        <div class="controls">
+            <button class="btn btn-ult" id="g-ult" onclick="Game.useUlt()">⚡ УЛЬТИМЕЙТ</button>
+            <button class="btn btn-main" id="btn-action" onclick="Game.turn()">🚀 ИДТИ ВПЕРЕД</button>
+            <button class="btn btn-shop" onclick="UI.toggleShop(true)">🛒 МАГАЗИН</button>
+            <button class="btn btn-alt" onclick="location.reload()">🏳️ ПОБЕГ</button>
+        </div>
+    </div>
+</div>
+
+<div id="shop-overlay" class="shop-overlay hidden">
+    <div class="shop-menu">
+        <h3 style="color:var(--gold); margin-top:0;">ВНУТРИИГРОВОЙ МАГАЗИН</h3>
+        <div id="shop-items">
+            <button class="btn btn-alt btn-full" style="width:100%; margin-bottom:10px;" onclick="Game.buyBuff('heal')">💊 АПТЕЧКА (100 🪙)</button>
+            <button class="btn btn-alt btn-full" style="width:100%; margin-bottom:10px;" onclick="Game.buyBuff('armor')">🛡️ БРОНЯ 5 ХОДОВ (250 🪙)</button>
+            <button class="btn btn-alt btn-full" style="width:100%;" onclick="Game.buyBuff('charge')">⚡ ЗАРЯД УЛЬТЫ (150 🪙)</button>
+        </div>
+        <button class="btn btn-main" style="width:100%; margin-top:20px;" onclick="UI.toggleShop(false)">ЗАКРЫТЬ</button>
+    </div>
+</div>
+
+<script>
+const CHARS = {
+    epstein: { n: "Эпштейн", hp: 15, color: "#f1c40f", rarity: "C", passive: "Нет особенностей" },
+    skuf: { n: "Скуф", hp: 30, color: "#8b4513", rarity: "C", passive: "15% шанс блока урона" },
+    musk: { n: "Маск", hp: 20, color: "#3498db", rarity: "R", passive: "+25% к монетам" },
+    mrbeast: { n: "MrBeast", hp: 35, color: "#2ecc71", rarity: "E", passive: "x2 Гемы" },
+    tung: { n: "Тунг Сахур", hp: 120, color: "#e74c3c", rarity: "E", passive: "Хрупкий гигант (-5 HP > 67)" },
+    bandera: { n: "Бандера", hp: 150, color: "#000", rarity: "L", passive: "Реген 2 HP за ход" },
+    dev: { n: "Developer", hp: 9999, color: "#fff", rarity: "DEV", god: true, secret: true }
+};
+
+const EVENTS = [
+    { t: "Путин ввел налог", hp: -5, c: -30, good: false },
+    { t: "Навальный прислал донат", hp: 0, c: 50, good: true },
+    { t: "Скуф угостил пивом", hp: 10, c: 0, good: true },
+    { t: "ТЦК выдали повестку", hp: -15, c: -20, good: false },
+    { t: "Нашел гемы в системнике", hp: 0, c: 0, gems: 5, good: true }
+];
+
+const Game = {
+    state: { gems: 10, bank: 500, lvl: 1, unlocked: ['epstein'] },
+    cur: null,
+
+    init() {
+        const s = localStorage.getItem('ep_v56');
+        if(s) Object.assign(this.state, JSON.parse(s));
+        UI.renderMenu();
+    },
+
+    save() { localStorage.setItem('ep_v56', JSON.stringify(this.state)); },
+
+    spin() {
+        if(this.state.bank < 250) return alert("Мало монет!");
+        this.state.bank -= 250;
+        let pool = Object.keys(CHARS).filter(id => id !== 'dev');
+        let res = pool[Math.floor(Math.random()*pool.length)];
+        if(!this.state.unlocked.includes(res)) this.state.unlocked.push(res);
+        alert("Выпал: " + CHARS[res].n);
+        this.save(); UI.renderMenu();
+    },
+
+    start(id) {
+        this.cur = { 
+            id, hp: CHARS[id].hp, maxHp: CHARS[id].hp, coins: 50, 
+            turns: 0, ult: 0, armor: 0, bossMode: false, bossHp: 1000 
+        };
+        UI.screen('game');
+        this.update();
+    },
+
+    turn() {
+        if(this.cur.bossMode) return this.bossFight();
+        
+        this.cur.turns++;
+        let scale = 1 + (this.cur.turns/100);
+        let ev = EVENTS[Math.floor(Math.random()*EVENTS.length)];
+        
+        // Пассивки
+        let dmg = ev.hp * scale;
+        let gold = ev.c * scale;
+
+        if(this.cur.id === 'skuf' && Math.random() < 0.15) { dmg = 0; UI.log("БЛОК! Пивная броня спасла.", true); }
+        if(this.cur.id === 'musk') gold *= 1.25;
+        if(this.cur.id === 'bandera') this.cur.hp += 2;
+        if(this.cur.id === 'tung' && this.cur.hp > 67) this.cur.hp -= 5;
+        if(ev.gems && this.cur.id === 'mrbeast') ev.gems *= 2;
+
+        // Броня
+        if(this.cur.armor > 0 && dmg < 0) { dmg *= 0.5; this.cur.armor--; }
+
+        this.cur.hp = Math.min(this.cur.maxHp * 2, Math.max(0, this.cur.hp + dmg));
+        this.cur.coins = Math.max(0, this.cur.coins + gold);
+        if(ev.gems) this.state.gems += ev.gems;
+        this.cur.ult = Math.min(100, this.cur.ult + 10);
+
+        UI.log(`${ev.t} (${Math.floor(gold)}🪙)`, ev.good);
+        
+        if(this.cur.turns >= 300) this.startBoss();
+        if(this.cur.hp <= 0 && this.cur.id !== 'dev') this.end(false);
+        this.update();
+    },
+
+    buyBuff(type) {
+        if(type === 'heal' && this.cur.coins >= 100) { this.cur.hp += 20; this.cur.coins -= 100; }
+        else if(type === 'armor' && this.cur.coins >= 250) { this.cur.armor = 5; this.cur.coins -= 250; }
+        else if(type === 'charge' && this.cur.coins >= 150) { this.cur.ult = 100; this.cur.coins -= 150; }
+        else { alert("Нет денег!"); }
+        UI.toggleShop(false);
+        this.update();
+    },
+
+    useUlt() {
+        if(this.cur.ult < 100) return;
+        if(this.cur.bossMode) { this.cur.bossHp -= 200; UI.log("УЛЬТА БЬЕТ БОССА! -200 HP", true); }
+        else { this.cur.hp = this.cur.maxHp; UI.log("УЛЬТА: Здоровье восстановлено!", true); }
+        this.cur.ult = 0;
+        this.update();
+    },
+
+    startBoss() {
+        this.cur.bossMode = true;
+        document.getElementById('boss-ui').classList.remove('hidden');
+        document.getElementById('trip-cont').classList.add('hidden');
+        document.getElementById('btn-action').innerText = "⚔️ АТАКОВАТЬ БОССА";
+        UI.log("ПОЯВИЛСЯ ЭМИТЕНТ! УБЕЙ ЕГО!", false);
+    },
+
+    bossFight() {
+        let dmgToBoss = 30 + (this.state.lvl * 5);
+        let dmgToPlayer = 15 + (this.cur.turns / 20);
+        
+        this.cur.bossHp -= dmgToBoss;
+        if(this.cur.armor > 0) { dmgToPlayer *= 0.5; this.cur.armor--; }
+        this.cur.hp -= dmgToPlayer;
+        this.cur.ult = Math.min(100, this.cur.ult + 15);
+
+        UI.log(`Удар! Босс: -${dmgToBoss} | Вы: -${Math.floor(dmgToPlayer)}`, false);
+
+        if(this.cur.bossHp <= 0) this.end(true);
+        if(this.cur.hp <= 0) this.end(false);
+        this.update();
+    },
+
+    end(win) {
+        this.state.bank += Math.floor(this.cur.coins);
+        if(win) { this.state.gems += 100; this.state.lvl++; alert("БОСС ПОВЕРЖЕН! +100 Геммов"); }
+        else { alert("ВЫ ПОГИБЛИ."); }
+        this.save(); location.reload();
+    },
+
+    update() {
+        document.getElementById('g-hp').innerText = Math.floor(this.cur.hp);
+        document.getElementById('g-coins').innerText = Math.floor(this.cur.coins);
+        document.getElementById('g-name').innerText = CHARS[this.cur.id].n;
+        document.getElementById('g-passive').innerText = "Пассивка: " + CHARS[this.cur.id].passive + (this.cur.armor > 0 ? ` (БРОНЯ: ${this.cur.armor})` : "");
+        document.getElementById('g-progress').style.width = (this.cur.turns / 3) + "%";
+        document.getElementById('g-ult').disabled = this.cur.ult < 100;
+        document.getElementById('boss-hp-bar').style.width = (this.cur.bossHp / 10) + "%";
+    }
+};
+
+const UI = {
+    screen(id) { 
+        document.getElementById('screen-menu').classList.toggle('hidden', id!=='menu');
+        document.getElementById('screen-game').classList.toggle('hidden', id!=='game');
+    },
+    renderMenu() {
+        document.getElementById('m-gems').innerText = Game.state.gems;
+        document.getElementById('m-bank').innerText = Game.state.bank;
+        document.getElementById('m-lvl').innerText = Game.state.lvl;
+        const list = document.getElementById('char-list');
+        list.innerHTML = '';
+        Object.keys(CHARS).forEach(id => {
+            const c = CHARS[id];
+            if(c.secret && !Game.state.unlocked.includes(id)) return;
+            let locked = !Game.state.unlocked.includes(id);
+            list.innerHTML += `<div class="card" style="border-left:4px solid ${c.color}">
+                <div><b>${c.n}</b><br><small>${c.passive}</small></div>
+                <button class="btn btn-alt" onclick="Game.start('${id}')" ${locked?'disabled':''}>${locked?'🔒':'В БОЙ'}</button>
+            </div>`;
+        });
+    },
+    log(m, g) { let l = document.getElementById('g-log'); l.innerText = m; l.style.color = g ? 'var(--green)' : 'var(--red)'; },
+    toggleShop(show) { document.getElementById('shop-overlay').classList.toggle('hidden', !show); },
+    toggleDebug() { let c = prompt("Код:"); if(c==='888867'){Game.state.bank+=10000; Game.save(); UI.renderMenu();} }
+};
+
+Game.init();
+</script>
+</body>
+</html>
+
